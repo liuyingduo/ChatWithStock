@@ -41,7 +41,7 @@ interface StockData {
 
 const stockData = ref<Partial<StockData>>({})
 const chartRef = ref<HTMLElement | null>(null)
-let chart: echarts.ECharts | null = null
+const chart = ref<echarts.ECharts | null>(null)
 
 const loadingStates = ref({
   basicMetrics: false,
@@ -76,34 +76,39 @@ const metrics = computed(() => [
 
 const initChart = async () => {
   try {
+    await nextTick()
     if (!chartRef.value) {
       console.warn('Chart container not found')
-      return null
+      return false
     }
 
-    const newChart = echarts.init(chartRef.value)
-    const handleResize = () => newChart.resize()
-    window.addEventListener('resize', handleResize)
+    // 如果已经存在 chart 实例，先销毁
+    if (chart.value) {
+      chart.value.dispose()
+    }
+
+    // 创建新的 chart 实例
+    chart.value = echarts.init(chartRef.value)
     
-    chart = newChart
-    return handleResize
+    // 返回 resize 处理函数
+    return () => chart.value?.resize()
   } catch (error) {
     console.error('Failed to initialize chart:', error)
-    return null
+    return false
   }
 }
 
 const updateChart = async (data: any) => {
   try {
-    // 确保有数据
     if (!data?.daily_stats?.length) {
       console.warn('No daily stats data available for chart')
       return
     }
 
-    if (!chart) {
+    if (!chart.value) {
       console.warn('Chart not initialized')
-      return
+      await initChart() // 尝试重新初始化
+      if (!chart.value) return // 如果还是失败就退出
     }
 
     const option = {
@@ -171,8 +176,7 @@ const updateChart = async (data: any) => {
       ]
     }
 
-    // 设置新的配置
-    chart.setOption(option, true)
+    chart.value.setOption(option, true)
   } catch (error) {
     console.error('Error updating chart:', error)
     throw error
@@ -286,15 +290,8 @@ onMounted(async () => {
   // 添加可见性变化监听器
   document.addEventListener('visibilitychange', handleVisibilityChange)
   
-  // 初始化图表
+  // 初始化图表并保存 resize 处理函数
   resizeHandler = await initChart()
-  
-  // 如果初始化失败，可以在一段时间后重试
-  if (!chart) {
-    setTimeout(async () => {
-      resizeHandler = await initChart()
-    }, 100)
-  }
 })
 
 onUnmounted(() => {
@@ -307,9 +304,9 @@ onUnmounted(() => {
   }
   
   // 销毁图表
-  if (chart) {
-    chart.dispose()
-    chart = null
+  if (chart.value) {
+    chart.value.dispose()
+    chart.value = null
   }
 })
 
