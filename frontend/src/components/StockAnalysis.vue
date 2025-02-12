@@ -75,21 +75,22 @@ const metrics = computed(() => [
 ] as Metric[])
 
 const initChart = async () => {
-  await nextTick()
   try {
+    if (!chartRef.value) {
+      console.warn('Chart container not found')
+      return null
+    }
+
     const newChart = echarts.init(chartRef.value)
     const handleResize = () => newChart.resize()
     window.addEventListener('resize', handleResize)
     
-    return {
-      chart: newChart,
-      handleResize
-    }
+    chart = newChart
+    return handleResize
   } catch (error) {
     console.error('Failed to initialize chart:', error)
     return null
   }
-  
 }
 
 const updateChart = async (data: any) => {
@@ -100,26 +101,10 @@ const updateChart = async (data: any) => {
       return
     }
 
-    // 等待 DOM 更新
-    await nextTick()
-    
-    if (!chartRef.value) {
-      console.warn('Chart container not found during update')
-      // return
-    }
-
-    // 如果图表不存在，初始化它
     if (!chart) {
-      const chartInstance = await initChart()
-      if (!chartInstance) {
-        console.warn('Chart initialization failed')
-        return
-      }
-      chart = chartInstance.chart
+      console.warn('Chart not initialized')
+      return
     }
-
-    // 确保图表容器尺寸正确
-    chart.resize()
 
     const option = {
       tooltip: {
@@ -295,15 +280,33 @@ const startAnalysis = () => {
     })
 }
 
-// 保持 onMounted 只做事件监听
-onMounted(() => {
+let resizeHandler: (() => void) | null = null
+
+onMounted(async () => {
+  // 添加可见性变化监听器
   document.addEventListener('visibilitychange', handleVisibilityChange)
+  
+  // 初始化图表
+  resizeHandler = await initChart()
+  
+  // 如果初始化失败，可以在一段时间后重试
+  if (!chart) {
+    setTimeout(async () => {
+      resizeHandler = await initChart()
+    }, 100)
+  }
 })
 
 onUnmounted(() => {
-  // Clean up visibility listener
+  // 清理可见性监听器
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   
+  // 清理 resize 事件监听器
+  if (resizeHandler) {
+    window.removeEventListener('resize', resizeHandler)
+  }
+  
+  // 销毁图表
   if (chart) {
     chart.dispose()
     chart = null
@@ -334,7 +337,10 @@ defineExpose({
             <i class="fas fa-spinner fa-spin"></i> 加载价格数据...
           </div>
         </template>
-        <div v-else ref="chartRef" class="chart-container"></div>
+        <div 
+          ref="chartRef" 
+          class="chart-container"
+        ></div>
       </div>
       
       <div class="sudden-changes">
@@ -367,11 +373,10 @@ defineExpose({
 }
 
 .chart-container {
-  height: 400px;
   width: 100%;
+  height: 400px;
   margin: 2rem 0;
-  min-height: 400px;
-  min-width: 200px;
+  background: rgba(0, 0, 0, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
