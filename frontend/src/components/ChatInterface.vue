@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, nextTick, computed } from 'vue'
 import { useChatStore } from '@/stores/chat'
 import StockChart from '@/components/StockChart.vue'
 import StockMetrics from '@/components/StockMetrics.vue'
@@ -10,6 +10,7 @@ const chatStore = useChatStore()
 const inputMessage = ref('')
 const messagesContainer = ref<HTMLElement | null>(null)
 const showWelcome = ref(true)
+const isTyping = ref(false)
 
 const scrollToBottom = async () => {
   await nextTick()
@@ -19,16 +20,27 @@ const scrollToBottom = async () => {
 }
 
 const renderMarkdown = (content: string): string => {
-  const html = marked(content)
+  const html = marked.parse(content, { async: false }) as string
   return DOMPurify.sanitize(html)
 }
 
 const sendMessage = async () => {
   if (!inputMessage.value.trim()) return
   showWelcome.value = false
-  await chatStore.sendMessage(inputMessage.value)
-  inputMessage.value = ''
-  await scrollToBottom()
+  
+  // 显示打字指示器
+  isTyping.value = true
+  
+  try {
+    await chatStore.sendMessage(inputMessage.value)
+    inputMessage.value = ''
+  } catch (error) {
+    console.error('发送消息失败:', error)
+  } finally {
+    // 隐藏打字指示器
+    isTyping.value = false
+    await scrollToBottom()
+  }
 }
 
 const suggestions = [
@@ -42,6 +54,12 @@ const suggestions = [
 const useExample = (text: string) => {
   inputMessage.value = text
 }
+
+// 计算当前时间
+const currentTime = computed(() => {
+  const now = new Date()
+  return `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`
+})
 
 onMounted(() => {
   scrollToBottom()
@@ -75,6 +93,7 @@ onMounted(() => {
         v-for="(message, index) in chatStore.messages"
         :key="index"
         :class="['message-wrapper', message.role]"
+        :style="{ animationDelay: `${index * 0.1}s` }"
       >
         <div class="avatar">
           <i :class="message.role === 'user' ? 'fas fa-user' : 'fas fa-robot'"></i>
@@ -91,6 +110,21 @@ onMounted(() => {
               :metrics="message.data.metrics"
             />
           </template>
+          <div class="message-time">{{ currentTime }}</div>
+        </div>
+      </div>
+      
+      <!-- 打字指示器 -->
+      <div v-if="isTyping" class="message-wrapper assistant typing-indicator">
+        <div class="avatar">
+          <i class="fas fa-robot"></i>
+        </div>
+        <div class="message">
+          <div class="typing">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
         </div>
       </div>
     </div>
@@ -102,10 +136,10 @@ onMounted(() => {
         @keyup.enter="sendMessage"
         type="text"
         placeholder="输入您的问题（例如：分析贵州茅台的投资价值）"
-        :disabled="chatStore.loading"
+        :disabled="chatStore.loading || isTyping"
       />
-      <button @click="sendMessage" :disabled="chatStore.loading">
-        <i class="fas" :class="chatStore.loading ? 'fa-spinner fa-spin' : 'fa-paper-plane'"></i>
+      <button @click="sendMessage" :disabled="chatStore.loading || isTyping">
+        <i class="fas" :class="chatStore.loading || isTyping ? 'fa-spinner fa-spin' : 'fa-paper-plane'"></i>
       </button>
     </div>
   </div>
@@ -121,6 +155,7 @@ onMounted(() => {
   border-radius: 20px;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
 }
 
 .welcome-screen {
@@ -129,11 +164,13 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   padding: 2rem;
+  background: radial-gradient(circle at center, rgba(66, 185, 131, 0.1), transparent);
 }
 
 .welcome-content {
   text-align: center;
   max-width: 800px;
+  animation: fadeIn 1s ease;
 }
 
 .welcome-icon {
@@ -158,11 +195,16 @@ onMounted(() => {
   cursor: pointer;
   transition: all 0.3s ease;
   border: 1px solid rgba(255, 255, 255, 0.2);
+  animation: fadeInUp 0.5s ease forwards;
+  opacity: 0;
+  transform: translateY(20px);
+  animation-delay: calc(var(--i, 0) * 0.1s);
 }
 
 .suggestion-chip:hover {
   background: rgba(255, 255, 255, 0.2);
   transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
 }
 
 .messages {
@@ -172,12 +214,16 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 2rem;
+  scroll-behavior: smooth;
 }
 
 .message-wrapper {
   display: flex;
   gap: 1rem;
   max-width: 80%;
+  animation: fadeInUp 0.5s ease forwards;
+  opacity: 0;
+  transform: translateY(20px);
 }
 
 .message-wrapper.user {
@@ -193,6 +239,7 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   background: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
 }
 
 .avatar i {
@@ -202,23 +249,32 @@ onMounted(() => {
 
 .message {
   background: rgba(255, 255, 255, 0.1);
-  padding: 1rem;
-  border-radius: 15px;
+  padding: 1rem 1.5rem;
+  border-radius: 18px;
   position: relative;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
 }
 
 .message-wrapper.user .message {
   background: var(--primary-color);
+  border-bottom-right-radius: 0;
+}
+
+.message-wrapper.assistant .message {
+  background: rgba(255, 255, 255, 0.1);
+  border-bottom-left-radius: 0;
 }
 
 .message-content {
   white-space: pre-wrap;
+  line-height: 1.5;
 }
 
 .message-time {
   font-size: 0.8rem;
   opacity: 0.7;
-  margin-top: 0.5rem;
+  margin-top: 0.8rem;
+  text-align: right;
 }
 
 .input-container {
@@ -236,11 +292,13 @@ input {
   background: rgba(255, 255, 255, 0.1);
   color: var(--text-color);
   font-size: 1rem;
+  transition: all 0.3s ease;
 }
 
 input:focus {
   outline: none;
   background: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 0 0 2px rgba(0, 191, 255, 0.3);
 }
 
 button {
@@ -252,6 +310,9 @@ button {
   color: white;
   cursor: pointer;
   transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 button:hover:not(:disabled) {
@@ -260,19 +321,102 @@ button:hover:not(:disabled) {
 }
 
 button:disabled {
-  opacity: 0.7;
+  opacity: 0.5;
   cursor: not-allowed;
+}
+
+.hide {
+  display: none;
+}
+
+/* 打字指示器样式 */
+.typing-indicator {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.typing {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0.5rem 0;
+}
+
+.typing span {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background-color: var(--accent-color);
+  border-radius: 50%;
+  animation: bounce 1.5s infinite ease-in-out;
+}
+
+.typing span:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.typing span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes bounce {
+  0%, 60%, 100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-10px);
+  }
 }
 
 @keyframes float {
   0% {
-    transform: translateY(0px);
+    transform: translateY(0);
   }
   50% {
     transform: translateY(-10px);
   }
   100% {
-    transform: translateY(0px);
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInUp {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 768px) {
+  .chat-container {
+    height: calc(100vh - 80px);
+    margin: 10px;
+    border-radius: 15px;
+  }
+  
+  .message-wrapper {
+    max-width: 90%;
+  }
+  
+  .suggestions {
+    flex-direction: column;
+  }
+  
+  .input-container {
+    padding: 1rem;
   }
 }
 </style> 

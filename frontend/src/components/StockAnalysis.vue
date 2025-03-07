@@ -74,12 +74,12 @@ const metrics = computed(() => [
   }
 ] as Metric[])
 
-const initChart = async () => {
+const initChart = async (): Promise<(() => void) | null> => {
   try {
     await nextTick()
     if (!chartRef.value) {
       console.warn('Chart container not found')
-      return false
+      return null
     }
 
     // 如果已经存在 chart 实例，先销毁
@@ -94,7 +94,7 @@ const initChart = async () => {
     return () => chart.value?.resize()
   } catch (error) {
     console.error('Failed to initialize chart:', error)
-    return false
+    return null
   }
 }
 
@@ -292,6 +292,11 @@ onMounted(async () => {
   
   // 初始化图表并保存 resize 处理函数
   resizeHandler = await initChart()
+  
+  // 添加窗口大小变化监听器
+  if (resizeHandler) {
+    window.addEventListener('resize', resizeHandler)
+  }
 })
 
 onUnmounted(() => {
@@ -317,7 +322,7 @@ defineExpose({
 
 <template>
   <div class="stock-analysis">
-    <h2>{{ symbol }} 股票分析</h2>
+    <h2 class="analysis-title">{{ symbol }} 股票分析</h2>
     
     <!-- 只在有数据时显示内容 -->
     <template v-if="Object.keys(stockData).length > 0 || loadingStates.basicMetrics">
@@ -337,6 +342,7 @@ defineExpose({
         <div 
           ref="chartRef" 
           class="chart-container"
+          :class="{ 'chart-loaded': !loadingStates.priceChart && stockData.daily_stats?.length }"
         ></div>
       </div>
       
@@ -359,14 +365,34 @@ defineExpose({
             </div>
           </div>
         </template>
+        <div v-else-if="!loadingStates.suddenChanges" class="no-data-message">
+          未检测到重要价格变动
+        </div>
       </div>
     </template>
+    
+    <!-- 无数据时显示的内容 -->
+    <div v-else class="no-data-container">
+      <i class="fas fa-chart-line no-data-icon"></i>
+      <p>请选择股票和日期范围开始分析</p>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .stock-analysis {
-  padding: 1rem;
+  padding: 1.5rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.analysis-title {
+  font-size: 1.8rem;
+  margin-bottom: 2rem;
+  color: var(--accent-color);
+  text-align: center;
+  font-weight: 600;
+  letter-spacing: 1px;
 }
 
 .chart-container {
@@ -375,6 +401,15 @@ defineExpose({
   margin: 2rem 0;
   background: rgba(0, 0, 0, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  transition: all 0.3s ease;
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.chart-loaded {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .sudden-changes {
@@ -383,41 +418,99 @@ defineExpose({
 
 .changes-list {
   display: grid;
-  gap: 0.5rem;
+  gap: 0.8rem;
+  margin-top: 1rem;
 }
 
 .change-item {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
-  padding: 0.5rem;
-  border-radius: 4px;
+  padding: 1rem;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+}
+
+.change-item:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
 }
 
 .positive {
   color: #4CAF50;
+  border-left: 4px solid #4CAF50;
 }
 
 .negative {
   color: #F44336;
+  border-left: 4px solid #F44336;
 }
 
 .loading-indicator {
   text-align: center;
   padding: 2rem;
   color: var(--accent-color);
+  font-size: 1.1rem;
 }
 
 .loading-indicator i {
   margin-right: 0.5rem;
+  animation: spin 1s linear infinite;
 }
 
 .metrics-section,
 .chart-section,
 .sudden-changes {
   margin-bottom: 2rem;
-  padding: 1rem;
+  padding: 1.5rem;
   background: rgba(255, 255, 255, 0.05);
-  border-radius: 10px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.metrics-section:hover,
+.chart-section:hover,
+.sudden-changes:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.no-data-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 400px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.no-data-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+  color: var(--accent-color);
+  opacity: 0.5;
+}
+
+.no-data-message {
+  text-align: center;
+  color: rgba(255, 255, 255, 0.6);
+  font-style: italic;
+  padding: 1rem;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@media (max-width: 768px) {
+  .change-item {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+  
+  .chart-container {
+    height: 300px;
+  }
 }
 </style> 

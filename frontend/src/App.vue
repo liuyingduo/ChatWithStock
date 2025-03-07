@@ -1,33 +1,92 @@
 <script setup lang="ts">
 import { RouterLink, RouterView } from 'vue-router'
+import { ref, onMounted, onUnmounted } from 'vue'
+
+const isScrolled = ref(false)
+const isMobileMenuOpen = ref(false)
+
+// 监听滚动事件，改变导航栏样式
+const handleScroll = () => {
+  isScrolled.value = window.scrollY > 20
+}
+
+// 切换移动端菜单
+const toggleMobileMenu = () => {
+  isMobileMenuOpen.value = !isMobileMenuOpen.value
+}
+
+// 关闭移动端菜单
+const closeMobileMenu = () => {
+  isMobileMenuOpen.value = false
+}
+
+onMounted(() => {
+  window.addEventListener('scroll', handleScroll)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('scroll', handleScroll)
+})
 </script>
 
 <template>
   <div class="app-container">
-    <header class="glass-header">
+    <header 
+      class="glass-header" 
+      :class="{ 'scrolled': isScrolled }"
+    >
       <div class="logo-container">
         <img alt="ChatWithStock logo" class="logo" src="@/assets/logo.svg" width="40" height="40" />
         <h1>ChatWithStock</h1>
       </div>
-      <nav class="glass-nav">
-        <RouterLink to="/" class="nav-link">
+      
+      <!-- 桌面导航 -->
+      <nav class="glass-nav desktop-nav">
+        <RouterLink to="/" class="nav-link" @click="closeMobileMenu">
           <i class="fas fa-comments"></i>
           <span>聊天</span>
         </RouterLink>
-        <RouterLink to="/analysis" class="nav-link">
+        <RouterLink to="/analysis" class="nav-link" @click="closeMobileMenu">
           <i class="fas fa-chart-line"></i>
           <span>分析</span>
         </RouterLink>
-        <RouterLink to="/portfolio" class="nav-link">
+        <RouterLink to="/portfolio" class="nav-link" @click="closeMobileMenu">
           <i class="fas fa-briefcase"></i>
           <span>投资组合</span>
         </RouterLink>
-        <RouterLink to="/market" class="nav-link">
+        <RouterLink to="/market" class="nav-link" @click="closeMobileMenu">
           <i class="fas fa-globe"></i>
           <span>市场</span>
         </RouterLink>
       </nav>
+      
+      <!-- 移动端菜单按钮 -->
+      <div class="mobile-menu-toggle" @click="toggleMobileMenu">
+        <i class="fas" :class="isMobileMenuOpen ? 'fa-times' : 'fa-bars'"></i>
+      </div>
     </header>
+    
+    <!-- 移动端导航菜单 -->
+    <div class="mobile-menu" :class="{ 'open': isMobileMenuOpen }">
+      <nav class="mobile-nav">
+        <RouterLink to="/" class="nav-link" @click="closeMobileMenu">
+          <i class="fas fa-comments"></i>
+          <span>聊天</span>
+        </RouterLink>
+        <RouterLink to="/analysis" class="nav-link" @click="closeMobileMenu">
+          <i class="fas fa-chart-line"></i>
+          <span>分析</span>
+        </RouterLink>
+        <RouterLink to="/portfolio" class="nav-link" @click="closeMobileMenu">
+          <i class="fas fa-briefcase"></i>
+          <span>投资组合</span>
+        </RouterLink>
+        <RouterLink to="/market" class="nav-link" @click="closeMobileMenu">
+          <i class="fas fa-globe"></i>
+          <span>市场</span>
+        </RouterLink>
+      </nav>
+    </div>
 
     <main class="main-content">
       <RouterView v-slot="{ Component }">
@@ -50,6 +109,14 @@ import { RouterLink, RouterView } from 'vue-router'
   --background-start: #1a1a2e;
   --background-end: #16213e;
   --text-color: #ffffff;
+  --header-height: 70px;
+  --header-height-scrolled: 60px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
 body {
@@ -59,6 +126,12 @@ body {
   background: linear-gradient(135deg, var(--background-start), var(--background-end));
   color: var(--text-color);
   min-height: 100vh;
+  line-height: 1.6;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
 }
 
 /* 玻璃拟态效果 */
@@ -78,14 +151,26 @@ body {
 }
 
 .glass-header {
-  @extend .glass-effect;
-  padding: 1rem 2rem;
+  padding: 0 2rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 100;
+  height: var(--header-height);
+  background: rgba(26, 26, 46, 0.8);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+}
+
+.glass-header.scrolled {
+  height: var(--header-height-scrolled);
+  background: rgba(26, 26, 46, 0.95);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
 }
 
 .logo-container {
@@ -97,6 +182,11 @@ body {
 .logo {
   filter: drop-shadow(0 0 8px var(--accent-color));
   animation: pulse 2s infinite;
+  transition: all 0.3s ease;
+}
+
+.scrolled .logo {
+  transform: scale(0.9);
 }
 
 .logo-container h1 {
@@ -106,6 +196,11 @@ body {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   text-shadow: 0 0 10px rgba(0, 191, 255, 0.5);
+  transition: all 0.3s ease;
+}
+
+.scrolled .logo-container h1 {
+  font-size: 1.6rem;
 }
 
 .glass-nav {
@@ -152,6 +247,58 @@ body {
   flex: 1;
   padding: 2rem;
   position: relative;
+  margin-top: var(--header-height);
+  transition: margin-top 0.3s ease;
+}
+
+.scrolled + .main-content {
+  margin-top: var(--header-height-scrolled);
+}
+
+/* 移动端菜单 */
+.mobile-menu-toggle {
+  display: none;
+  cursor: pointer;
+  font-size: 1.5rem;
+  padding: 0.5rem;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.mobile-menu-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.mobile-menu {
+  position: fixed;
+  top: var(--header-height);
+  left: 0;
+  right: 0;
+  background: rgba(26, 26, 46, 0.95);
+  backdrop-filter: blur(10px);
+  z-index: 99;
+  transform: translateY(-100%);
+  opacity: 0;
+  transition: all 0.3s ease;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+}
+
+.mobile-menu.open {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.mobile-nav {
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+}
+
+.mobile-nav .nav-link {
+  padding: 1rem;
+  margin-bottom: 0.5rem;
+  border-radius: 8px;
 }
 
 /* 动画效果 */
@@ -177,22 +324,26 @@ body {
   }
 }
 
+/* 响应式设计 */
 @media (max-width: 768px) {
   .glass-header {
-    flex-direction: column;
+    padding: 0 1rem;
+  }
+  
+  .desktop-nav {
+    display: none;
+  }
+  
+  .mobile-menu-toggle {
+    display: block;
+  }
+  
+  .logo-container h1 {
+    font-size: 1.5rem;
+  }
+  
+  .main-content {
     padding: 1rem;
-  }
-
-  .glass-nav {
-    margin-top: 1rem;
-    width: 100%;
-    justify-content: space-around;
-  }
-
-  .nav-link {
-    flex-direction: column;
-    padding: 0.5rem;
-    font-size: 0.8rem;
   }
 }
 </style>
